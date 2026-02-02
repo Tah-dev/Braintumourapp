@@ -215,3 +215,258 @@ if uploaded_file is not None:
                 # Get prediction
                 pred_probs = model.predict(img_input, verbose=0)[0]
                 pred_class = np.argmax(pred_probs)
+                
+                predictions[model_name] = {
+                    'probabilities': pred_probs,
+                    'predicted_class': pred_class,
+                    'confidence': pred_probs[pred_class]
+                }
+        
+        except Exception as e:
+            st.error(f"❌ Prediction error: {str(e)}")
+            st.stop()
+    
+    # Calculate ensemble results
+    avg_probs = np.mean([p['probabilities'] for p in predictions.values()], axis=0)
+    ensemble_class = np.argmax(avg_probs)
+    ensemble_confidence = avg_probs[ensemble_class]
+    
+    # Majority voting
+    votes = [p['predicted_class'] for p in predictions.values()]
+    vote_counts = np.bincount(votes, minlength=NUM_CLASSES)
+    majority_class = np.argmax(vote_counts)
+    
+    # Display ensemble results
+    with col2:
+        st.subheader("🎯 Ensemble Result")
+        
+        # Color code based on tumor type
+        predicted_class_name = CLASS_NAMES[ensemble_class]
+        
+        if predicted_class_name == "Normal":
+            st.success(f"✅ **{predicted_class_name}**")
+        else:
+            st.warning(f"⚠️ **{predicted_class_name} Tumor Detected**")
+        
+        st.metric("Ensemble Confidence", f"{ensemble_confidence:.2%}")
+        
+        # Confidence level
+        if ensemble_confidence >= 0.90:
+            st.success("🎯 **Very High Confidence**")
+        elif ensemble_confidence >= 0.75:
+            st.info("✅ **High Confidence**")
+        elif ensemble_confidence >= 0.60:
+            st.warning("⚠️ **Moderate Confidence**")
+        else:
+            st.error("❗ **Low Confidence** - Result uncertain")
+        
+        # Voting information
+        st.write(f"**Majority Vote:** {CLASS_NAMES[majority_class]} ({vote_counts[majority_class]}/{len(models)} votes)")
+    
+    # Individual model predictions
+    st.markdown("---")
+    st.subheader("🤖 Individual Model Predictions")
+    
+    model_cols = st.columns(len(models))
+    
+    for idx, (model_name, pred) in enumerate(predictions.items()):
+        with model_cols[idx]:
+            pred_class = pred['predicted_class']
+            confidence = pred['confidence']
+            pred_class_name = CLASS_NAMES[pred_class]
+            
+            st.write(f"**{model_name}**")
+            
+            if pred_class_name == "Normal":
+                st.success(f"**{pred_class_name}**")
+            else:
+                st.warning(f"**{pred_class_name}**")
+            
+            st.write(f"Confidence: {confidence:.2%}")
+            st.progress(float(confidence))
+    
+    # Ensemble probability breakdown
+    st.markdown("---")
+    st.subheader("📊 Ensemble Probability Breakdown")
+    
+    # Create columns for each class
+    prob_cols = st.columns(NUM_CLASSES)
+    
+    for idx, class_name in enumerate(CLASS_NAMES):
+        with prob_cols[idx]:
+            st.metric(
+                label=f"🧠 {class_name}",
+                value=f"{avg_probs[idx]:.2%}"
+            )
+            st.progress(float(avg_probs[idx]))
+    
+    # Detailed breakdown table
+    st.markdown("---")
+    st.subheader("📋 Detailed Model Breakdown")
+    
+    import pandas as pd
+    
+    breakdown_data = []
+    for model_name, pred in predictions.items():
+        pred_class = pred['predicted_class']
+        breakdown_data.append({
+            'Model': model_name,
+            'Prediction': CLASS_NAMES[pred_class],
+            'Confidence': f"{pred['confidence']:.2%}",
+            'Top 3 Predictions': ', '.join([
+                f"{CLASS_NAMES[i]} ({pred['probabilities'][i]:.1%})" 
+                for i in np.argsort(pred['probabilities'])[::-1][:3]
+            ])
+        })
+    
+    df = pd.DataFrame(breakdown_data)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    
+    # Interpretation
+    st.markdown("---")
+    st.subheader("💡 Interpretation")
+    
+    st.write(f"""
+    The ensemble predicts this MRI scan as **{CLASS_NAMES[ensemble_class]}** with {ensemble_confidence:.2%} average confidence.
+    
+    **Voting Results:**
+    """)
+    
+    for i, class_name in enumerate(CLASS_NAMES):
+        if vote_counts[i] > 0:
+            st.write(f"- **{class_name}**: {vote_counts[i]} out of {len(models)} models")
+    
+    if CLASS_NAMES[ensemble_class] == "Normal":
+        st.info("""
+        ℹ️ The models indicate **no tumor detected** in this MRI scan. 
+        This means the brain tissue appears normal according to the trained models.
+        """)
+    else:
+        st.warning(f"""
+        ⚠️ The models detected a **{CLASS_NAMES[ensemble_class]} tumor**. 
+        
+        **About {CLASS_NAMES[ensemble_class]}:**
+        """)
+        
+        if CLASS_NAMES[ensemble_class] == "Glioma":
+            st.write("- Most common type of brain tumor originating from glial cells")
+            st.write("- Can be benign or malignant")
+        elif CLASS_NAMES[ensemble_class] == "Meningioma":
+            st.write("- Tumor that forms on membranes covering the brain and spinal cord")
+            st.write("- Usually benign and slow-growing")
+        elif CLASS_NAMES[ensemble_class] == "Pituitary":
+            st.write("- Tumor that forms in the pituitary gland")
+            st.write("- Usually benign but can affect hormone production")
+    
+    st.write("""
+    
+    **Remember:** This ensemble combines three different architectures to provide 
+    a more robust prediction, but it should NOT replace professional medical diagnosis.
+    """)
+    
+    # Technical details
+    with st.expander("🔧 Technical Details"):
+        st.write("**Ensemble Method:**")
+        st.write("- Final Prediction: Based on average probabilities")
+        st.write("- Majority Vote: Most common prediction across models")
+        st.write("- Individual predictions are weighted equally")
+        
+        st.write("\n**Individual Model Predictions:**")
+        for model_name, pred in predictions.items():
+            st.write(f"- {model_name}: {CLASS_NAMES[pred['predicted_class']]} ({pred['confidence']:.4f})")
+        
+        st.write("\n**Average Probabilities (Ensemble):**")
+        for idx, class_name in enumerate(CLASS_NAMES):
+            st.write(f"- {class_name}: {avg_probs[idx]:.4f}")
+        
+        st.write("\n**Class Mapping:**")
+        for class_name, idx in CLASS_INDICES.items():
+            st.write(f"- {class_name.capitalize()}: Class {idx}")
+        
+        st.write("\n**Preprocessing Methods:**")
+        st.write("- MobileNetV2: Scale to [-1, 1]")
+        st.write("- DenseNet121: Subtract mean RGB [103.939, 116.779, 123.68]")
+        st.write("- ResNet50: Subtract mean RGB [103.939, 116.779, 123.68]")
+        
+        st.write("\n**Image Processing:**")
+        st.write(f"- Original size: {image.size[0]}x{image.size[1]}")
+        st.write(f"- Resized to: {IMG_SIZE[0]}x{IMG_SIZE[1]}")
+        st.write(f"- Color mode: RGB")
+
+# ----------------------------
+# INSTRUCTIONS (when no image uploaded)
+# ----------------------------
+else:
+    st.info("👆 Upload a brain MRI image using the file uploader above to get started.")
+    
+    st.markdown("---")
+    
+    # Two columns for information
+    info_col1, info_col2 = st.columns(2)
+    
+    with info_col1:
+        st.subheader("📖 How to Use")
+        st.write("""
+        1. **Click** on "Browse files" above
+        2. **Select** a brain MRI image from your computer
+        3. **Wait** for all three models to analyze
+        4. **View** the ensemble prediction results
+        
+        **Tips for Best Results:**
+        - Use clear, high-quality MRI images
+        - Ensure proper orientation
+        - Brain MRI scans work best
+        """)
+        
+        st.subheader("🎯 Ensemble Advantages")
+        st.write("""
+        **Why use an ensemble?**
+        - **Higher Accuracy**: Combines multiple models
+        - **More Reliable**: Reduces individual model bias
+        - **Robust**: Better handles edge cases
+        - **Confidence**: Voting provides consensus
+        """)
+    
+    with info_col2:
+        st.subheader("🧠 Tumor Types")
+        
+        st.write("**Glioma**")
+        st.write("- Most common brain tumor type")
+        st.write("- Originates from glial cells")
+        
+        st.write("\n**Meningioma**")
+        st.write("- Forms on brain/spinal cord membranes")
+        st.write("- Usually benign and slow-growing")
+        
+        st.write("\n**Pituitary**")
+        st.write("- Forms in the pituitary gland")
+        st.write("- Can affect hormone production")
+        
+        st.write("\n**Normal**")
+        st.write("- No tumor detected")
+        st.write("- Brain tissue appears healthy")
+        
+        st.subheader("🤖 The Three Models")
+        st.write("""
+        - **MobileNetV2**: Fast, efficient, mobile-optimized
+        - **DenseNet121**: Dense connections, feature reuse
+        - **ResNet50**: Deep architecture, residual learning
+        
+        Each model has been trained on brain MRI images
+        and optimized for tumor classification.
+        """)
+
+# ----------------------------
+# FOOTER
+# ----------------------------
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; color: gray; padding: 10px;'>
+        <p>🧠 Ensemble Brain Tumor Classification System</p>
+        <p><strong>MobileNetV2 + DenseNet121 + ResNet50</strong></p>
+        <p><small>For Educational and Research Purposes Only • Not for Medical Diagnosis</small></p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
