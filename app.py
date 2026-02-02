@@ -14,378 +14,249 @@ import os
 # CONSTANTS
 # ----------------------------
 IMG_SIZE = (224, 224)
-MODEL_PATH = "MobileNet_Binary_MRI_best.keras"
+MODEL_PATH = "MobileNet_Binary_MRI.keras"
 
-# Page configuration
 st.set_page_config(
-    page_title="MRI Binary Classification",
+    page_title="MRI Classification",
     page_icon="🧠",
-    layout="centered",
-    initial_sidebar_state="expanded"
+    layout="centered"
 )
 
-# ----------------------------
-# CUSTOM CSS
-# ----------------------------
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 0.5rem;
-    }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #666;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-    }
-    .stProgress > div > div > div > div {
-        background-color: #1f77b4;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ----------------------------
-# HEADER
-# ----------------------------
-st.markdown('<p class="main-header">🧠 MRI Binary Classification System</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Powered by MobileNetV2 Deep Learning Model</p>', unsafe_allow_html=True)
+st.title("🧠 MRI Image Classification")
+st.write("Upload an image to check if it is an MRI scan.")
+st.write(f"**Model:** MobileNetV2 | **TensorFlow:** {tf.__version__}")
 
 # ----------------------------
 # LOAD MODEL
 # ----------------------------
-@st.cache_resource(show_spinner=False)
+@st.cache_resource
 def load_model():
     """Load the MobileNetV2 binary classification model"""
     try:
         # Check if file exists
         if not os.path.exists(MODEL_PATH):
             st.error(f"❌ Model file not found: {MODEL_PATH}")
-            st.info("📋 Please ensure 'MobileNet_Binary_MRI_best.keras' is in the app directory.")
             st.stop()
         
         # Get file size
-        file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)  # Convert to MB
+        file_size = os.path.getsize(MODEL_PATH) / 1024 / 1024
         
         # Load model with safe_mode=False for compatibility
-        with st.spinner("🔄 Loading model... Please wait..."):
-            model = tf.keras.models.load_model(
-                MODEL_PATH, 
-                compile=False,
-                safe_mode=False
-            )
+        model = tf.keras.models.load_model(
+            MODEL_PATH, 
+            compile=False
+        )
         
-        return model, file_size
+        st.sidebar.success(f"✅ Model loaded successfully!")
+        st.sidebar.write(f"📂 File size: {file_size:.2f} MB")
+        st.sidebar.write(f"🏗️ Input shape: {model.input_shape}")
+        st.sidebar.write(f"📤 Output shape: {model.output_shape}")
+        
+        return model
         
     except Exception as e:
         st.error(f"❌ Error loading model: {str(e)}")
-        st.info("💡 This might be due to TensorFlow version mismatch. Please check the deployment logs.")
         st.stop()
 
 # Load the model
-model, file_size = load_model()
-
-# ----------------------------
-# SIDEBAR - MODEL INFO
-# ----------------------------
-with st.sidebar:
-    st.header("ℹ️ Model Information")
-    
-    st.markdown("**Architecture:**")
-    st.info("MobileNetV2")
-    
-    st.markdown("**Task:**")
-    st.info("Binary Classification")
-    
-    st.markdown("**Model File:**")
-    st.code(MODEL_PATH, language=None)
-    
-    st.markdown("**File Size:**")
-    st.success(f"{file_size:.2f} MB")
-    
-    st.markdown("**Input Shape:**")
-    st.code(f"{model.input_shape}", language=None)
-    
-    st.markdown("**Output Shape:**")
-    st.code(f"{model.output_shape}", language=None)
-    
-    st.markdown("**Total Parameters:**")
-    st.metric("Parameters", f"{model.count_params():,}")
-    
-    st.divider()
-    
-    # Environment Info
-    st.header("🔧 Environment")
-    st.markdown(f"""
-    **Training Environment:**
-    - Python: 3.10.19
-    - TensorFlow: 2.10.1
-    - NumPy: 1.24.3
-    
-    **Current Environment:**
-    - TensorFlow: {tf.__version__}
-    - NumPy: {np.__version__}
-    """)
-    
-    st.divider()
-    
-    # Instructions
-    st.header("📖 How to Use")
-    st.markdown("""
-    1. **Upload** an image (JPG, JPEG, PNG)
-    2. **Wait** for the model to analyze
-    3. **View** classification results
-    4. **Check** confidence scores
-    """)
-    
-    st.divider()
-    
-    # Disclaimer
-    st.header("⚠️ Disclaimer")
-    st.error("""
-    **For Educational Use Only**
-    
-    This tool is NOT intended for medical diagnosis. 
-    Always consult qualified healthcare professionals 
-    for medical advice.
-    """)
+model = load_model()
 
 # ----------------------------
 # IMAGE PREPROCESSING
 # ----------------------------
 def preprocess_image(image: Image.Image) -> np.ndarray:
-    """
-    Preprocess image for model prediction using MobileNetV2 preprocessing
-    """
-    # Convert to RGB if needed
+    """Preprocess image for model prediction"""
     if image.mode != "RGB":
         image = image.convert("RGB")
-    
-    # Resize to model input size
     image = image.resize(IMG_SIZE)
-    
-    # Convert to array
-    img_array = np.array(image).astype(np.float32)
-    
-    # MobileNetV2 preprocessing: scale to [-1, 1]
-    img_array = (img_array / 127.5) - 1.0
-    
-    # Add batch dimension
+    img_array = np.array(image).astype(np.float32) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
-    
     return img_array
 
 # ----------------------------
-# MAIN APP - FILE UPLOAD
+# SIDEBAR INFO
 # ----------------------------
-st.markdown("---")
+with st.sidebar:
+    st.header("ℹ️ About")
+    st.write("""
+    This app uses a **MobileNetV2** deep learning model 
+    to classify images as MRI scans or non-MRI images.
+    """)
+    
+    st.divider()
+    
+    st.header("📊 Model Details")
+    st.write("**Architecture:** MobileNetV2")
+    st.write("**Task:** Binary Classification")
+    st.write("**Classes:** MRI vs Non-MRI")
+    st.write("**Image Size:** 224x224")
+    
+    st.divider()
+    
+    st.header("⚠️ Disclaimer")
+    st.error("""
+    **Educational purposes only.**
+    
+    This tool is NOT for medical diagnosis.
+    Always consult healthcare professionals.
+    """)
 
+# ----------------------------
+# MAIN APP - IMAGE UPLOAD
+# ----------------------------
 uploaded_file = st.file_uploader(
-    "📁 Upload an Image for Classification",
+    "📁 Choose an image...",
     type=["jpg", "jpeg", "png"],
-    help="Supported formats: JPG, JPEG, PNG"
+    help="Upload a JPG, JPEG, or PNG image"
 )
 
 if uploaded_file is not None:
-    # Load image
-    try:
-        image = Image.open(uploaded_file)
-    except Exception as e:
-        st.error(f"❌ Error loading image: {str(e)}")
-        st.stop()
+    # Load and display image
+    image = Image.open(uploaded_file)
     
-    # Display image and info
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("📸 Uploaded Image")
-        st.image(image, use_container_width=True, caption="Original Image")
-        
-        # Image info
-        st.markdown("**Image Details:**")
-        st.write(f"- **Size:** {image.size[0]} × {image.size[1]} pixels")
-        st.write(f"- **Mode:** {image.mode}")
-        st.write(f"- **Format:** {image.format if image.format else 'Unknown'}")
-        
-    # Preprocess and predict
-    with col2:
-        st.subheader("🔍 Analysis Results")
-        
-        # Preprocess image
-        with st.spinner("🔄 Preprocessing image..."):
-            img_input = preprocess_image(image)
-            time.sleep(0.3)  # Small delay for UX
-        
-        # Make prediction
-        with st.spinner("🧠 Running model inference..."):
-            try:
-                prediction = model.predict(img_input, verbose=0)
-                pred_value = float(prediction[0][0])
-            except Exception as e:
-                st.error(f"❌ Prediction error: {str(e)}")
-                st.stop()
-        
-        # Calculate probabilities
-        # Output is sigmoid: close to 0 = class 0, close to 1 = class 1
-        class_1_prob = pred_value
-        class_0_prob = 1.0 - pred_value
-        
-        # Determine predicted class (threshold = 0.5)
-        predicted_class = 1 if pred_value >= 0.5 else 0
-        confidence = max(class_0_prob, class_1_prob)
-        
-        # Display prediction
-        st.markdown("### 🎯 Prediction")
-        
-        if predicted_class == 1:
-            st.success("✅ **CLASS 1 DETECTED**")
-            st.metric("Confidence", f"{class_1_prob:.2%}", delta=None)
-        else:
-            st.info("ℹ️ **CLASS 0 DETECTED**")
-            st.metric("Confidence", f"{class_0_prob:.2%}", delta=None)
-        
-        # Confidence level indicator
-        if confidence >= 0.95:
-            st.success("🎯 **Very High Confidence**")
-        elif confidence >= 0.85:
-            st.info("✅ **High Confidence**")
-        elif confidence >= 0.70:
-            st.warning("⚠️ **Moderate Confidence**")
-        else:
-            st.error("❗ **Low Confidence** - Result uncertain")
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+        st.write(f"📐 **Size:** {image.size[0]} x {image.size[1]} pixels")
+        st.write(f"🎨 **Mode:** {image.mode}")
     
-    # ----------------------------
-    # DETAILED PROBABILITIES
-    # ----------------------------
+    # Preprocess image
+    img_input = preprocess_image(image)
+    
+    # Make prediction
+    with st.spinner("🔍 Analyzing image..."):
+        time.sleep(0.5)
+        
+        try:
+            # Get prediction
+            prediction = model.predict(img_input, verbose=0)
+            
+            # Extract probabilities
+            non_mri_prob = float(prediction[0][0])
+            mri_prob = 1.0 - non_mri_prob
+            
+        except Exception as e:
+            st.error(f"❌ Prediction error: {str(e)}")
+            st.stop()
+    
+    # Display results
+    with col2:
+        st.subheader("Classification Result")
+        
+        # Show prediction
+        if mri_prob >= 0.5:
+            st.success("🧲 **MRI IMAGE DETECTED**")
+            st.metric("Confidence", f"{mri_prob:.2%}", delta=None)
+        else:
+            st.error("🚫 **NOT AN MRI IMAGE**")
+            st.metric("Confidence", f"{non_mri_prob:.2%}", delta=None)
+        
+        # Confidence level
+        max_prob = max(mri_prob, non_mri_prob)
+        
+        if max_prob >= 0.95:
+            st.info("🎯 **Very High Confidence**")
+        elif max_prob >= 0.85:
+            st.info("✅ **High Confidence**")
+        elif max_prob >= 0.70:
+            st.info("⚠️ **Moderate Confidence**")
+        else:
+            st.warning("⚠️ **Low Confidence** - Result uncertain")
+    
+    # Detailed probabilities
     st.markdown("---")
     st.subheader("📊 Probability Breakdown")
     
     prob_col1, prob_col2 = st.columns(2)
     
     with prob_col1:
-        st.markdown("**Class 0 Probability**")
-        st.progress(class_0_prob)
         st.metric(
-            label="Class 0",
-            value=f"{class_0_prob:.4f}",
-            delta=f"{class_0_prob:.2%}"
+            label="🧲 MRI Probability",
+            value=f"{mri_prob:.4f}",
+            delta=f"{mri_prob:.2%}"
         )
+        st.progress(mri_prob)
     
     with prob_col2:
-        st.markdown("**Class 1 Probability**")
-        st.progress(class_1_prob)
         st.metric(
-            label="Class 1",
-            value=f"{class_1_prob:.4f}",
-            delta=f"{class_1_prob:.2%}"
+            label="🚫 Non-MRI Probability",
+            value=f"{non_mri_prob:.4f}",
+            delta=f"{non_mri_prob:.2%}"
         )
+        st.progress(non_mri_prob)
     
-    # ----------------------------
-    # INTERPRETATION
-    # ----------------------------
+    # Interpretation
     st.markdown("---")
     st.subheader("💡 Interpretation")
     
-    with st.expander("📖 Understanding the Results", expanded=True):
+    if mri_prob >= 0.5:
         st.write(f"""
-        **Predicted Class:** {'Class 1' if predicted_class == 1 else 'Class 0'}
+        The model predicts this is **an MRI image** with {mri_prob:.2%} confidence.
         
-        **Confidence Level:** {confidence:.2%}
+        This means the model is {mri_prob:.1%} certain that the uploaded image 
+        is a medical MRI scan based on its learned features.
+        """)
+    else:
+        st.write(f"""
+        The model predicts this is **NOT an MRI image** with {non_mri_prob:.2%} confidence.
         
-        **What does this mean?**
-        - The model outputs a probability between 0 and 1
-        - Values **close to 0** → Class 0
-        - Values **close to 1** → Class 1
-        - Threshold for classification: **0.5**
-        
-        **Raw Output:** {pred_value:.6f}
-        
-        **Model Decision:**
-        {f"Since {pred_value:.4f} ≥ 0.5, the model predicts **Class 1**" if predicted_class == 1 
-          else f"Since {pred_value:.4f} < 0.5, the model predicts **Class 0**"}
+        This means the model is {non_mri_prob:.1%} certain that the uploaded image 
+        is not a medical MRI scan.
         """)
     
-    # ----------------------------
-    # TECHNICAL DETAILS
-    # ----------------------------
+    # Technical details (expandable)
     with st.expander("🔧 Technical Details"):
-        st.write(f"""
-        **Preprocessing Pipeline:**
-        1. Convert to RGB color mode
-        2. Resize to {IMG_SIZE[0]}×{IMG_SIZE[1]} pixels
-        3. Normalize to [-1, 1] range (MobileNetV2 preprocessing)
-        4. Add batch dimension
+        st.write("**Raw Model Output:**")
+        st.code(f"Prediction: {prediction[0][0]:.6f}")
+        st.write("**Interpretation:**")
+        st.write(f"- Values close to 0 → MRI")
+        st.write(f"- Values close to 1 → Non-MRI")
+        st.write(f"- Threshold: 0.5")
         
-        **Model Architecture:**
-        - Base: MobileNetV2 (ImageNet pretrained)
-        - Custom classification head
-        - Output: Single sigmoid neuron
-        
-        **Classification:**
-        - Binary classification task
-        - Sigmoid activation function
-        - Decision threshold: 0.5
-        
-        **Raw Model Output:**
-```
-        {prediction[0][0]:.8f}
-```
-        
-        **Input Shape:** {img_input.shape}
-        """)
+        st.write("\n**Preprocessing:**")
+        st.write(f"- Resized to: {IMG_SIZE[0]}x{IMG_SIZE[1]} pixels")
+        st.write(f"- Normalized: [0, 1] range")
+        st.write(f"- Color mode: RGB")
 
 # ----------------------------
-# INSTRUCTIONS (No image uploaded)
+# INSTRUCTIONS (when no image uploaded)
 # ----------------------------
 else:
-    st.info("👆 **Upload an image using the file uploader above to begin classification**")
+    st.info("👆 Upload an image using the file uploader above to get started.")
     
     st.markdown("---")
+    st.subheader("📖 How to Use")
     
-    # Example use cases
-    col_a, col_b = st.columns(2)
-    
-    with col_a:
-        st.subheader("✅ Supported Images")
-        st.markdown("""
-        - JPG/JPEG format
-        - PNG format
-        - RGB or grayscale images
-        - Any resolution (will be resized)
-        """)
-    
-    with col_b:
-        st.subheader("📝 Best Practices")
-        st.markdown("""
-        - Use clear, well-lit images
-        - Ensure proper image orientation
-        - Avoid heavily compressed images
-        - Check image quality before upload
-        """)
-    
-    st.markdown("---")
-    
-    # Model capabilities
-    st.subheader("🔍 What This Model Does")
     st.write("""
-    This deep learning model performs **binary classification** on uploaded images.
-    It uses a **MobileNetV2** architecture trained to distinguish between two classes.
+    1. **Click** on "Browse files" above
+    2. **Select** an image from your computer (JPG, JPEG, or PNG)
+    3. **Wait** for the model to analyze the image
+    4. **View** the classification result and confidence score
     
-    The model:
-    - Processes images of any size (resized to 224×224)
-    - Outputs probability scores for each class
-    - Provides confidence levels for predictions
-    - Uses transfer learning for improved accuracy
+    **Tips for Best Results:**
+    - Use clear, high-quality images
+    - Ensure the image is properly oriented
+    - Medical MRI scans work best
     """)
+    
+    st.markdown("---")
+    st.subheader("🧪 Example Use Cases")
+    
+    example_col1, example_col2 = st.columns(2)
+    
+    with example_col1:
+        st.write("**✅ Will Detect as MRI:**")
+        st.write("- Brain MRI scans")
+        st.write("- Spine MRI images")
+        st.write("- Any medical MRI scan")
+    
+    with example_col2:
+        st.write("**❌ Will Detect as Non-MRI:**")
+        st.write("- Regular photos")
+        st.write("- X-ray images")
+        st.write("- CT scans")
+        st.write("- Ultrasound images")
 
 # ----------------------------
 # FOOTER
@@ -393,13 +264,9 @@ else:
 st.markdown("---")
 st.markdown(
     """
-    <div style='text-align: center; color: gray; padding: 20px;'>
-        <p style='font-size: 1.1rem; font-weight: bold;'>🧠 MRI Binary Classification System</p>
-        <p>Powered by <strong>MobileNetV2</strong> & <strong>TensorFlow</strong></p>
-        <p style='font-size: 0.9rem;'><em>For Educational and Research Purposes Only</em></p>
-        <p style='font-size: 0.8rem; margin-top: 10px;'>
-            Model trained with: Python 3.10.19 | TensorFlow 2.10.1 | NumPy 1.24.3
-        </p>
+    <div style='text-align: center; color: gray; padding: 10px;'>
+        <p>🧠 MRI Classification System | Powered by MobileNetV2 & TensorFlow</p>
+        <p><small>For Educational and Research Purposes Only</small></p>
     </div>
     """,
     unsafe_allow_html=True
