@@ -320,7 +320,7 @@ if uploaded_file is not None:
         })
     
     df = pd.DataFrame(breakdown_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, use_container_width=True)
     
     # Interpretation
     st.markdown("---")
