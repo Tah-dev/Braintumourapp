@@ -22,14 +22,19 @@ MODEL_PATHS = {
     "ResNet50": "ResNet50_Multiclass_best.keras"
 }
 
+# Class names - Brain Tumor Types
+CLASS_NAMES = ['Glioma', 'Meningioma', 'Normal', 'Pituitary']
+CLASS_INDICES = {'glioma': 0, 'meningioma': 1, 'normal': 2, 'pituitary': 3}
+NUM_CLASSES = len(CLASS_NAMES)
+
 st.set_page_config(
-    page_title="Ensemble Multiclass Classification",
+    page_title="Brain Tumor Classification",
     page_icon="🧠",
     layout="wide"
 )
 
-st.title("🧠 Ensemble Multiclass MRI Classification")
-st.write("Upload an MRI image to classify it using an ensemble of three deep learning models.")
+st.title("🧠 Ensemble Brain Tumor Classification")
+st.write("Upload an MRI image to classify brain tumors using an ensemble of three deep learning models.")
 st.write(f"**Models:** MobileNetV2 + DenseNet121 + ResNet50 | **TensorFlow:** {tf.__version__}")
 
 # ----------------------------
@@ -80,8 +85,6 @@ def load_models():
     """Load all three models for ensemble prediction"""
     models = {}
     model_info = {}
-    class_names = None
-    num_classes = None
     
     for model_name, model_path in MODEL_PATHS.items():
         try:
@@ -95,17 +98,11 @@ def load_models():
             
             # Get model info
             file_size = os.path.getsize(model_path) / (1024 * 1024)
-            output_shape = model.output_shape
-            
-            # Get number of classes from output shape
-            if num_classes is None:
-                num_classes = output_shape[-1]
             
             model_info[model_name] = {
                 'file_size': file_size,
                 'input_shape': model.input_shape,
-                'output_shape': output_shape,
-                'num_classes': num_classes
+                'output_shape': model.output_shape
             }
             
         except Exception as e:
@@ -116,17 +113,10 @@ def load_models():
         st.error("❌ No models could be loaded! Please check model files.")
         st.stop()
     
-    return models, model_info, num_classes
+    return models, model_info
 
 # Load all models
-models, model_info, NUM_CLASSES = load_models()
-
-# Class names (you should update these based on your actual classes)
-# For example, if you have brain tumor types:
-CLASS_NAMES = [f"Class {i}" for i in range(NUM_CLASSES)]
-
-# If you know your actual class names, replace the above line with:
-# CLASS_NAMES = ["glioma", "meningioma", "notumor", "pituitary"]  # Example
+models, model_info = load_models()
 
 # ----------------------------
 # SIDEBAR - MODEL INFO
@@ -151,14 +141,13 @@ with st.sidebar:
             st.write(f"**File Size:** {info['file_size']:.2f} MB")
             st.write(f"**Input Shape:** {info['input_shape']}")
             st.write(f"**Output Shape:** {info['output_shape']}")
-            st.write(f"**Classes:** {info['num_classes']}")
     
     st.divider()
     
     st.header("ℹ️ About Ensemble")
     st.write("""
     This app uses an **ensemble** of three state-of-the-art 
-    deep learning models to classify MRI images:
+    deep learning models to classify brain MRI images:
     
     - **MobileNetV2**: Lightweight and efficient
     - **DenseNet121**: Dense connections for feature reuse
@@ -188,7 +177,7 @@ with st.sidebar:
 # MAIN APP - IMAGE UPLOAD
 # ----------------------------
 uploaded_file = st.file_uploader(
-    "📁 Choose an MRI image...",
+    "📁 Choose a brain MRI image...",
     type=["jpg", "jpeg", "png"],
     help="Upload a JPG, JPEG, or PNG image"
 )
@@ -202,7 +191,7 @@ if uploaded_file is not None:
     
     with col1:
         st.subheader("📸 Uploaded Image")
-        st.image(image, caption="Original Image", use_column_width=True)
+        st.image(image, caption="Original MRI Image", use_column_width=True)
         st.write(f"📐 **Size:** {image.size[0]} x {image.size[1]} pixels")
         st.write(f"🎨 **Mode:** {image.mode}")
     
@@ -226,209 +215,3 @@ if uploaded_file is not None:
                 # Get prediction
                 pred_probs = model.predict(img_input, verbose=0)[0]
                 pred_class = np.argmax(pred_probs)
-                
-                predictions[model_name] = {
-                    'probabilities': pred_probs,
-                    'predicted_class': pred_class,
-                    'confidence': pred_probs[pred_class]
-                }
-        
-        except Exception as e:
-            st.error(f"❌ Prediction error: {str(e)}")
-            st.stop()
-    
-    # Calculate ensemble results
-    avg_probs = np.mean([p['probabilities'] for p in predictions.values()], axis=0)
-    ensemble_class = np.argmax(avg_probs)
-    ensemble_confidence = avg_probs[ensemble_class]
-    
-    # Majority voting
-    votes = [p['predicted_class'] for p in predictions.values()]
-    vote_counts = np.bincount(votes, minlength=NUM_CLASSES)
-    majority_class = np.argmax(vote_counts)
-    
-    # Display ensemble results
-    with col2:
-        st.subheader("🎯 Ensemble Result")
-        
-        # Show prediction based on average probabilities
-        st.success(f"**Predicted Class: {CLASS_NAMES[ensemble_class]}**")
-        st.metric("Ensemble Confidence", f"{ensemble_confidence:.2%}")
-        
-        # Confidence level
-        if ensemble_confidence >= 0.90:
-            st.success("🎯 **Very High Confidence**")
-        elif ensemble_confidence >= 0.75:
-            st.info("✅ **High Confidence**")
-        elif ensemble_confidence >= 0.60:
-            st.warning("⚠️ **Moderate Confidence**")
-        else:
-            st.error("❗ **Low Confidence** - Result uncertain")
-        
-        # Voting information
-        st.write(f"**Majority Vote:** {CLASS_NAMES[majority_class]} ({vote_counts[majority_class]}/{len(models)} votes)")
-    
-    # Individual model predictions
-    st.markdown("---")
-    st.subheader("🤖 Individual Model Predictions")
-    
-    model_cols = st.columns(len(models))
-    
-    for idx, (model_name, pred) in enumerate(predictions.items()):
-        with model_cols[idx]:
-            pred_class = pred['predicted_class']
-            confidence = pred['confidence']
-            
-            st.write(f"**{model_name}**")
-            st.info(f"**{CLASS_NAMES[pred_class]}**")
-            st.write(f"Confidence: {confidence:.2%}")
-            st.progress(float(confidence))
-    
-    # Ensemble probability breakdown
-    st.markdown("---")
-    st.subheader("📊 Ensemble Probability Breakdown")
-    
-    # Create columns for each class
-    prob_cols = st.columns(min(NUM_CLASSES, 4))  # Max 4 columns
-    
-    for idx, class_name in enumerate(CLASS_NAMES):
-        col_idx = idx % len(prob_cols)
-        with prob_cols[col_idx]:
-            st.metric(
-                label=f"{class_name}",
-                value=f"{avg_probs[idx]:.2%}"
-            )
-            st.progress(float(avg_probs[idx]))
-    
-    # Detailed breakdown table
-    st.markdown("---")
-    st.subheader("📋 Detailed Model Breakdown")
-    
-    import pandas as pd
-    
-    breakdown_data = []
-    for model_name, pred in predictions.items():
-        pred_class = pred['predicted_class']
-        breakdown_data.append({
-            'Model': model_name,
-            'Prediction': CLASS_NAMES[pred_class],
-            'Confidence': f"{pred['confidence']:.2%}",
-            'Top 3 Classes': ', '.join([
-                f"{CLASS_NAMES[i]} ({pred['probabilities'][i]:.1%})" 
-                for i in np.argsort(pred['probabilities'])[::-1][:3]
-            ])
-        })
-    
-    df = pd.DataFrame(breakdown_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    
-    # Interpretation
-    st.markdown("---")
-    st.subheader("💡 Interpretation")
-    
-    st.write(f"""
-    The ensemble predicts this image as **{CLASS_NAMES[ensemble_class]}** with {ensemble_confidence:.2%} average confidence.
-    
-    **Voting Results:**
-    """)
-    
-    for i, class_name in enumerate(CLASS_NAMES):
-        if vote_counts[i] > 0:
-            st.write(f"- **{class_name}**: {vote_counts[i]} out of {len(models)} models")
-    
-    st.write("""
-    The ensemble combines the strengths of three different architectures to provide 
-    a more robust and reliable prediction than any single model.
-    """)
-    
-    # Technical details
-    with st.expander("🔧 Technical Details"):
-        st.write("**Ensemble Method:**")
-        st.write("- Final Prediction: Based on average probabilities")
-        st.write("- Majority Vote: Most common prediction across models")
-        st.write("- Individual predictions are also shown")
-        
-        st.write("\n**Individual Model Predictions:**")
-        for model_name, pred in predictions.items():
-            st.write(f"- {model_name}: {CLASS_NAMES[pred['predicted_class']]} ({pred['confidence']:.4f})")
-        
-        st.write("\n**Average Probabilities (Ensemble):**")
-        for idx, class_name in enumerate(CLASS_NAMES):
-            st.write(f"- {class_name}: {avg_probs[idx]:.4f}")
-        
-        st.write("\n**Preprocessing Methods:**")
-        st.write("- MobileNetV2: Scale to [-1, 1]")
-        st.write("- DenseNet121: Subtract mean RGB [103.939, 116.779, 123.68]")
-        st.write("- ResNet50: Subtract mean RGB [103.939, 116.779, 123.68]")
-        
-        st.write("\n**Image Processing:**")
-        st.write(f"- Original size: {image.size[0]}x{image.size[1]}")
-        st.write(f"- Resized to: {IMG_SIZE[0]}x{IMG_SIZE[1]}")
-        st.write(f"- Color mode: RGB")
-
-# ----------------------------
-# INSTRUCTIONS (when no image uploaded)
-# ----------------------------
-else:
-    st.info("👆 Upload an MRI image using the file uploader above to get started.")
-    
-    st.markdown("---")
-    
-    # Two columns for information
-    info_col1, info_col2 = st.columns(2)
-    
-    with info_col1:
-        st.subheader("📖 How to Use")
-        st.write("""
-        1. **Click** on "Browse files" above
-        2. **Select** an MRI image from your computer
-        3. **Wait** for all three models to analyze
-        4. **View** the ensemble prediction results
-        
-        **Tips for Best Results:**
-        - Use clear, high-quality MRI images
-        - Ensure proper orientation
-        - MRI scans work best
-        """)
-        
-        st.subheader("🎯 Ensemble Advantages")
-        st.write("""
-        **Why use an ensemble?**
-        - **Higher Accuracy**: Combines multiple models
-        - **More Reliable**: Reduces individual model bias
-        - **Robust**: Better handles edge cases
-        - **Confidence**: Voting provides consensus
-        """)
-    
-    with info_col2:
-        st.subheader("📊 Classification Classes")
-        
-        st.write(f"**Number of Classes:** {NUM_CLASSES}")
-        st.write("**Classes:**")
-        for class_name in CLASS_NAMES:
-            st.write(f"- {class_name}")
-        
-        st.subheader("🤖 The Three Models")
-        st.write("""
-        - **MobileNetV2**: Fast, efficient, mobile-optimized
-        - **DenseNet121**: Dense connections, feature reuse
-        - **ResNet50**: Deep architecture, residual learning
-        
-        Each model has been trained on the same dataset
-        and optimized for multiclass classification.
-        """)
-
-# ----------------------------
-# FOOTER
-# ----------------------------
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center; color: gray; padding: 10px;'>
-        <p>🧠 Ensemble Multiclass MRI Classification System</p>
-        <p><strong>MobileNetV2 + DenseNet121 + ResNet50</strong></p>
-        <p><small>For Educational and Research Purposes Only</small></p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
