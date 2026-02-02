@@ -136,7 +136,7 @@ if uploaded_file is not None:
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
         st.write(f"📐 **Size:** {image.size[0]} x {image.size[1]} pixels")
         st.write(f"🎨 **Mode:** {image.mode}")
     
