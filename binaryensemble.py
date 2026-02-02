@@ -50,25 +50,31 @@ def preprocess_mobilenet(image: Image.Image) -> np.ndarray:
     return img_array
 
 def preprocess_densenet(image: Image.Image) -> np.ndarray:
-    """DenseNet121 preprocessing: scale to [0, 1] and normalize per channel"""
-    from tensorflow.keras.applications.densenet import preprocess_input
+    """DenseNet121 preprocessing: scale to [0, 1] and normalize"""
     if image.mode != "RGB":
         image = image.convert("RGB")
     image_resized = image.resize(IMG_SIZE)
     img_array = np.array(image_resized).astype(np.float32)
+    # DenseNet preprocessing: per-channel mean subtraction
+    # Mean values for ImageNet: [103.939, 116.779, 123.68]
+    img_array[..., 0] -= 103.939
+    img_array[..., 1] -= 116.779
+    img_array[..., 2] -= 123.68
     img_array = np.expand_dims(img_array, axis=0)
-    img_array = preprocess_input(img_array)
     return img_array
 
 def preprocess_resnet(image: Image.Image) -> np.ndarray:
     """ResNet50 preprocessing: subtract mean RGB values"""
-    from tensorflow.keras.applications.resnet50 import preprocess_input
     if image.mode != "RGB":
         image = image.convert("RGB")
     image_resized = image.resize(IMG_SIZE)
     img_array = np.array(image_resized).astype(np.float32)
+    # ResNet preprocessing: per-channel mean subtraction
+    # Mean values for ImageNet: [103.939, 116.779, 123.68]
+    img_array[..., 0] -= 103.939
+    img_array[..., 1] -= 116.779
+    img_array[..., 2] -= 123.68
     img_array = np.expand_dims(img_array, axis=0)
-    img_array = preprocess_input(img_array)
     return img_array
 
 # ----------------------------
@@ -80,29 +86,27 @@ def load_models():
     models = {}
     model_info = {}
     
-    with st.spinner("🔄 Loading ensemble models... Please wait..."):
-        for model_name, model_path in MODEL_PATHS.items():
-            try:
-                if not os.path.exists(model_path):
-                    st.warning(f"⚠️ {model_name} model not found: {model_path}")
-                    continue
-                
-                # Load model
-                model = tf.keras.models.load_model(model_path, compile=False)
-                models[model_name] = model
-                
-                # Get model info
-                file_size = os.path.getsize(model_path) / (1024 * 1024)
-                model_info[model_name] = {
-                    'file_size': file_size,
-                    'input_shape': model.input_shape,
-                    'output_shape': model.output_shape,
-                    'params': model.count_params()
-                }
-                
-            except Exception as e:
-                st.error(f"❌ Error loading {model_name}: {str(e)}")
+    for model_name, model_path in MODEL_PATHS.items():
+        try:
+            if not os.path.exists(model_path):
+                st.warning(f"⚠️ {model_name} model not found: {model_path}")
                 continue
+            
+            # Load model
+            model = tf.keras.models.load_model(model_path, compile=False)
+            models[model_name] = model
+            
+            # Get model info
+            file_size = os.path.getsize(model_path) / (1024 * 1024)
+            model_info[model_name] = {
+                'file_size': file_size,
+                'input_shape': model.input_shape,
+                'output_shape': model.output_shape
+            }
+            
+        except Exception as e:
+            st.error(f"❌ Error loading {model_name}: {str(e)}")
+            continue
     
     if len(models) == 0:
         st.error("❌ No models could be loaded! Please check model files.")
@@ -131,7 +135,6 @@ with st.sidebar:
         with st.expander(f"📊 {model_name}"):
             info = model_info[model_name]
             st.write(f"**File Size:** {info['file_size']:.2f} MB")
-            st.write(f"**Parameters:** {info['params']:,}")
             st.write(f"**Input Shape:** {info['input_shape']}")
             st.write(f"**Output Shape:** {info['output_shape']}")
     
@@ -149,6 +152,12 @@ with st.sidebar:
     The final prediction is based on **majority voting** 
     and **average probability** from all models.
     """)
+    
+    st.divider()
+    
+    st.header("🔧 Environment")
+    st.write(f"**TensorFlow:** {tf.__version__}")
+    st.write(f"**NumPy:** {np.__version__}")
     
     st.divider()
     
@@ -184,7 +193,7 @@ if uploaded_file is not None:
     
     # Make predictions with all models
     with st.spinner("🔍 Running ensemble prediction..."):
-        time.sleep(0.3)
+        time.sleep(0.5)
         
         predictions = {}
         preprocessing_functions = {
@@ -288,25 +297,6 @@ if uploaded_file is not None:
         )
         st.progress(avg_non_mri_prob)
     
-    # Detailed breakdown table
-    st.markdown("---")
-    st.subheader("📋 Detailed Model Breakdown")
-    
-    import pandas as pd
-    
-    breakdown_data = []
-    for model_name, pred in predictions.items():
-        breakdown_data.append({
-            'Model': model_name,
-            'MRI Probability': f"{pred['mri_prob']:.4f}",
-            'Non-MRI Probability': f"{pred['non_mri_prob']:.4f}",
-            'Prediction': CLASS_NAMES[pred['predicted_class']],
-            'Confidence': f"{max(pred['mri_prob'], pred['non_mri_prob']):.2%}"
-        })
-    
-    df = pd.DataFrame(breakdown_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    
     # Interpretation
     st.markdown("---")
     st.subheader("💡 Interpretation")
@@ -347,8 +337,8 @@ if uploaded_file is not None:
         
         st.write("\n**Preprocessing Methods:**")
         st.write("- MobileNetV2: Scale to [-1, 1]")
-        st.write("- DenseNet121: Channel-wise normalization")
-        st.write("- ResNet50: Subtract mean RGB values")
+        st.write("- DenseNet121: Subtract mean RGB [103.939, 116.779, 123.68]")
+        st.write("- ResNet50: Subtract mean RGB [103.939, 116.779, 123.68]")
         
         st.write("\n**Image Processing:**")
         st.write(f"- Original size: {image.size[0]}x{image.size[1]}")
