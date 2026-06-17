@@ -38,6 +38,8 @@ def load_tumor_model():
         repo_id=HF_REPO_ID,
         filename=MODEL_FILENAME,
         cache_dir="./model_cache",
+        force_download=True,  # bypass any corrupted/partial file left from a
+                               # previous failed attempt at this same path
     )
     return load_model(model_path, compile=False)
 
