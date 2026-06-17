@@ -10,3 +10,4 @@ Pillow
 scikit-learn
 matplotlib
 seaborn
+huggingface_hub
