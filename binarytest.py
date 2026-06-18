@@ -1,16 +1,17 @@
 """
 Streamlit App — Brain Tumour Binary Classifier
 ============================================================
-EfficientNetB0 binary classification: tumor present (yes) vs
-not present (no).
+EfficientNetB0 binary classification: tumour present (yes) vs
+not present (no). Retrained model, saved directly as .h5.
 
 Model hosted on Hugging Face (NdahTah/BrainTumor, public repo),
-downloaded at runtime via huggingface_hub.
+downloaded at runtime via huggingface_hub — same pattern used
+for the dementia diagnosis apps.
 
 Class mapping (confirmed at training time):
-  no   -> 0   (no tumor)
-  yes  -> 1   (tumor present)
-  sigmoid output = P(yes / tumor present)
+  no   -> 0   (no tumour)
+  yes  -> 1   (tumour present)
+  sigmoid output = P(yes / tumour present)
 """
 
 import streamlit as st
@@ -23,7 +24,7 @@ from huggingface_hub import hf_hub_download
 # ── Config ──────────────────────────────────────────────────────────────
 
 HF_REPO_ID = "NdahTah/BrainTumor"
-MODEL_FILENAME = "best_model_efficientnetb0.1.keras"
+MODEL_FILENAME = "efficientnetb0_braintumor_binary_best.h5"
 
 INPUT_SIZE = (224, 224)
 THRESHOLD = 0.5
@@ -38,8 +39,6 @@ def load_tumor_model():
         repo_id=HF_REPO_ID,
         filename=MODEL_FILENAME,
         cache_dir="./model_cache",
-        force_download=True,  # bypass any corrupted/partial file left from a
-                               # previous failed attempt at this same path
     )
     return load_model(model_path, compile=False)
 
@@ -78,7 +77,7 @@ if uploaded_file is not None:
 
     with st.spinner("Analyzing image..."):
         prediction = model.predict(img_array, verbose=0)
-        probability_yes = float(prediction[0][0])   # P(tumor present)
+        probability_yes = float(prediction[0][0])   # P(tumour present)
         probability_no = 1 - probability_yes
 
     predicted_class = "Tumour Present" if probability_yes > THRESHOLD else "No Tumour"
